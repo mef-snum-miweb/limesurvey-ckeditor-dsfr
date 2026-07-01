@@ -45,16 +45,30 @@ class CKEditorDSFR extends PluginBase
 
         $assetUrl = $this->publish('assets');
 
-        // URL de base des assets DSFR → consommée par ckeditor-dsfr.js.
+        // Cache-buster : LimeSurvey publie les assets sous un hash de chemin
+        // stable → sans version dans l'URL, le navigateur sert l'ancien JS
+        // après une mise à jour du plugin. On suffixe `?v=<mtime max>` : l'URL
+        // change dès qu'un asset change, forçant le rechargement.
+        $dir = __DIR__ . '/assets/';
+        $ver = 0;
+        foreach (['ckeditor-dsfr.js', 'dsfr-templates.js', 'dsfr-styles.js', 'dsfr-contents.css'] as $f) {
+            $m = @filemtime($dir . $f);
+            if ($m && $m > $ver) {
+                $ver = $m;
+            }
+        }
+
+        // URL de base + version des assets DSFR → consommées par ckeditor-dsfr.js
+        // (qui suffixe lui-même ?v= sur templates_files / stylesSet / contentsCss).
         App()->clientScript->registerScript(
             'CKEditorDSFR-config',
-            'window.CKEditorDSFRConfig = {assetUrl: ' . json_encode($assetUrl, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) . '};',
+            'window.CKEditorDSFRConfig = {assetUrl: ' . json_encode($assetUrl, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) . ', v: ' . (int) $ver . '};',
             CClientScript::POS_HEAD
         );
 
         // Script d'accroche aux événements CKEditor (natif, non destructif).
         App()->clientScript->registerScriptFile(
-            $assetUrl . '/ckeditor-dsfr.js',
+            $assetUrl . '/ckeditor-dsfr.js?v=' . (int) $ver,
             CClientScript::POS_HEAD
         );
     }

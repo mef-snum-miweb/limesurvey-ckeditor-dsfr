@@ -16,28 +16,35 @@
         var cfg = (window.CKEditorDSFRConfig || {});
         var base = cfg.assetUrl;
         if (!base) return;
+        var v = cfg.v ? ('?v=' + cfg.v) : ''; // cache-buster versionné (cf. plugin PHP)
 
         // Plugin natif "templates" (embarqué dans LimeSurvey) → palette DSFR.
         config.extraPlugins = (config.extraPlugins ? config.extraPlugins + ',' : '') + 'templates';
         config.templates = 'dsfr';
-        config.templates_files = [base + '/dsfr-templates.js'];
+        config.templates_files = [base + '/dsfr-templates.js' + v];
         config.templates_replaceContent = false;
 
         // Menu "Styles" appliquant des CLASSES DSFR (survivent au sanitizer).
-        config.stylesSet = 'dsfr:' + base + '/dsfr-styles.js';
+        config.stylesSet = 'dsfr:' + base + '/dsfr-styles.js' + v;
 
         // CSS DSFR dans l'iframe de l'éditeur (aperçu WYSIWYG).
         config.contentsCss = (config.contentsCss ? [].concat(config.contentsCss) : [])
-            .concat([base + '/dsfr-contents.css']);
+            .concat([base + '/dsfr-contents.css' + v]);
 
-        // Boutons : LimeSurvey pilote l'inline via config.toolbar='inline2' et
-        // bascule avec lsswitchtoolbars. On ajoute le groupe DSFR à toutes les
-        // barres réellement définies (arrays).
-        ['toolbar_inline2', 'toolbar_inline', 'toolbar', 'toolbar_popup'].forEach(function (tb) {
-            if (Object.prototype.toString.call(config[tb]) === '[object Array]') {
-                config[tb].push({ name: 'dsfr', items: ['Styles', 'Templates'] });
-            }
-        });
+        // Boutons dans la barre d'outils. La barre COMPLÈTE (toolbar_inline)
+        // contient déjà nativement les combos Styles + Templates : notre
+        // stylesSet / templates_files (config globale) les peuplent — inutile
+        // d'y ajouter quoi que ce soit. Seule la barre BASIQUE (toolbar_inline2)
+        // n'a ni Styles ni Templates : on l'y ajoute.
+        //
+        // Garde d'idempotence : les tableaux de toolbar sont partagés entre
+        // instances et relus à chaque bascule (lsswitchtoolbars) — sans ce
+        // garde, le groupe s'empilerait (doublon, triplon…).
+        var basic = config.toolbar_inline2;
+        if (Object.prototype.toString.call(basic) === '[object Array]'
+            && !basic.some(function (g) { return g && g.name === 'dsfr'; })) {
+            basic.push({ name: 'dsfr', items: ['Styles', 'Templates'] });
+        }
     }
 
     var attempts = 0;
