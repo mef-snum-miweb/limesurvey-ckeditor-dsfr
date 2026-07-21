@@ -1,10 +1,11 @@
 /**
  * Palette de composants DSFR pour l'éditeur CKEditor de LimeSurvey.
  *
- * Chargée via `config.templates_files` (cf. overlays/ckeditor/config.js).
- * Bouton « Templates » → boîte de dialogue proposant des blocs DSFR prêts à
- * insérer. À utiliser dans le champ AIDE d'une question ou les textes
- * d'introduction / de fin (HTML riche conservé).
+ * Chargée par `assets/ckeditor-dsfr.js` : sur `editor.on('configLoaded')`, on
+ * suffixe le chemin de ce fichier dans `config.templates_files` — CKEditor
+ * l'ingère juste avant l'init des plugins. Bouton « Templates » → boîte de
+ * dialogue proposant des blocs DSFR prêts à insérer. À utiliser dans le champ
+ * AIDE d'une question ou les textes d'introduction / de fin (HTML riche conservé).
  *
  * NB : ne pas utiliser dans l'INTITULÉ d'une question (aplati en <h3>).
  * Les variantes (types d'alerte, callout avec/sans titre…) sont listées
