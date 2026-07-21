@@ -1,7 +1,7 @@
 <?php
 
 /**
- * CKEditorDSFR — plugin LimeSurvey.
+ * CKEditorDSFR — extension tierce LimeSurvey (plugin).
  *
  * Ajoute une palette de composants DSFR (alerte, mise en avant, accordéon,
  * citation, tableau, téléchargement…) et un menu de styles DSFR à l'éditeur
@@ -10,8 +10,8 @@
  * Architecture : le plugin injecte, sur les pages d'administration, un petit
  * script qui s'accroche aux événements NATIFS de CKEditor
  * (`instanceCreated` → `configLoaded`) pour ajouter le plugin « templates »,
- * un `stylesSet` et un `contentsCss`. AUCUN fichier du core n'est modifié
- * (pas d'override de config.js) — cf. ADR-071.
+ * un `stylesSet` et un `contentsCss`. AUCUN fichier du core LimeSurvey
+ * n'est modifié — public API et événements uniquement.
  */
 class CKEditorDSFR extends PluginBase
 {
@@ -43,7 +43,12 @@ class CKEditorDSFR extends PluginBase
             return;
         }
 
-        $assetUrl = $this->publish('assets');
+        // Publication indépendante de l'emplacement : `PluginBase::publish()`
+        // résout le chemin source en dur sur `webroot.plugins.<Classe>` = `plugins/`.
+        // Or ce plugin peut être installé dans `upload/plugins/` (flux « Upload &
+        // install » de l'UI) ou `application/core/plugins/`. On publie donc l'asset
+        // directement depuis `__DIR__` — fonctionne depuis les 3 emplacements.
+        $assetUrl = App()->getAssetManager()->publish(__DIR__ . '/assets');
 
         // Cache-buster : LimeSurvey publie les assets sous un hash de chemin
         // stable → sans version dans l'URL, le navigateur sert l'ancien JS

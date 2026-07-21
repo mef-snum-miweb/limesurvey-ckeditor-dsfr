@@ -4,12 +4,12 @@
         <name>CKEditorDSFR</name>
         <type>plugin</type>
         <creationDate>2026-07-01</creationDate>
-        <lastUpdate>2026-07-01</lastUpdate>
+        <lastUpdate>2026-07-21</lastUpdate>
         <author>MEF SNUM miweb</author>
         <authorUrl>https://github.com/mef-snum-miweb/limesurvey-ckeditor-dsfr</authorUrl>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
         <license>GNU General Public License version 2 or later</license>
-        <description><![CDATA[Ajoute une palette de composants DSFR (alerte, mise en avant, accordéon, tableau…) et des styles DSFR à l'éditeur de texte riche (CKEditor) de l'administration LimeSurvey. Injection via les événements natifs CKEditor — aucun fichier core modifié.]]></description>
+        <description><![CDATA[Extension tierce ajoutant une palette de composants DSFR (alerte, mise en avant, accordéon, tableau…) et des styles DSFR à l'éditeur de texte riche (CKEditor) de l'administration LimeSurvey. Injection via les événements natifs CKEditor — aucun fichier du core modifié.]]></description>
     </metadata>
     <compatibility>
         <version>5</version>
