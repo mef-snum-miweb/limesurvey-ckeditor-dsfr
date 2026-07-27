@@ -61,7 +61,7 @@ class CKEditorDSFR extends PluginBase
         // change dès qu'un asset change, forçant le rechargement.
         $dir = __DIR__ . '/assets/';
         $ver = 0;
-        foreach (['ckeditor-dsfr.js', 'dsfr-templates.js', 'dsfr-styles.js', 'dsfr-contents.css'] as $f) {
+        foreach (['ckeditor-dsfr.js', 'dsfr-templates.js', 'dsfr-styles.js', 'dsfr-widgets.js', 'dsfr-contents.css'] as $f) {
             $m = @filemtime($dir . $f);
             if ($m && $m > $ver) {
                 $ver = $m;

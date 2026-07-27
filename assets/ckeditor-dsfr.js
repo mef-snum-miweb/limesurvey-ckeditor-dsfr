@@ -20,6 +20,15 @@
 
         // Plugin natif "templates" (embarqué dans LimeSurvey) → palette DSFR.
         config.extraPlugins = (config.extraPlugins ? config.extraPlugins + ',' : '') + 'templates';
+
+        // Widgets DSFR : structure protégée + zones éditables (dsfr-widgets.js).
+        // Le plugin est externe au build CKEditor de LimeSurvey → on déclare son
+        // URL via addExternal (3ᵉ argument '' = le chemin inclut le nom de
+        // fichier, cache-buster compris). Ses dépendances `widget` et
+        // `lineutils` sont, elles, embarquées dans le build LimeSurvey.
+        // Appel idempotent : ré-enregistrer la même URL est sans effet.
+        CKEDITOR.plugins.addExternal('dsfrwidgets', base + '/dsfr-widgets.js' + v, '');
+        config.extraPlugins += ',dsfrwidgets';
         config.templates = 'dsfr';
         config.templates_files = [base + '/dsfr-templates.js' + v];
         config.templates_replaceContent = false;
