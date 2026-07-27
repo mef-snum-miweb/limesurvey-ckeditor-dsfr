@@ -159,17 +159,61 @@ via `CKEDITOR.plugins.addExternal` depuis `ckeditor-dsfr.js`). Un widget :
   contenu limité à de l'inline simple) et le contenu (`.fr-collapse`, riche) ;
 - garde un **downcast propre** : le HTML enregistré est le markup DSFR exact,
   sans artefact widget (wrappers et classes `cke_*` retirés des données) ;
-- s'**upcaste automatiquement** : les accordéons existants en base sont
+- s'**upcaste automatiquement** : les composants existants en base sont
   reconnus au chargement, et l'insertion via la palette Modèles passe par
   `insertHtml` → data processor → upcast.
 
 Particularité : `<button>` n'est pas éditable par défaut dans CKEditor 4 — le
 plugin l'autorise via `CKEDITOR.dtd.$editable.button = 1` (pattern documenté
-CKE4 pour les nested editables sur éléments non standard).
+CKE4 pour les nested editables sur éléments non standard). Les autres éléments
+utilisés comme zones éditables (`h3`, `p`, `div`, `blockquote`, `figcaption`)
+sont déjà dans `CKEDITOR.dtd.$editable` (vérifié dans le build CKEditor de
+LimeSurvey 6.16.16).
 
 Bonus : à l'initialisation d'un widget, si l'`id` de sa zone repliable est déjà
 présent dans le document (insertion de plusieurs accordéons), un id unique est
 généré et `aria-controls` resynchronisé — plus de correction manuelle.
+
+### Composants couverts (issue #9)
+
+Toute la palette Modèles est alignée sur le pattern widget, à l'exception
+assumée du tableau (voir plus bas) et des onglets (itération dédiée, issue #8) :
+
+| Composant | Widget | Zones éditables inline | Popin |
+| --- | --- | --- | --- |
+| Accordéon (`section.fr-accordion`) | `dsfrAccordion` | intitulé (inline simple) + contenu (riche) | Intitulé |
+| Mise en avant (`div.fr-callout`) — avec **et** sans titre | `dsfrCallout` | titre (si présent) + texte | Titre **optionnel** (vide = le `h3` est retiré ; rempli = créé et re-branché éditable) |
+| Alerte (`div.fr-alert`) — les 4 variantes | `dsfrAlert` | titre + texte (1ᵉʳ paragraphe) | Titre + **select Type** (bascule `fr-alert--info/success/error/warning`) |
+| Mise en exergue (`div.fr-highlight`) | `dsfrHighlight` | texte | — |
+| Citation (`figure.fr-quote`) | `dsfrQuote` | texte (`blockquote`, paragraphes) + auteur | — |
+| Téléchargement (`div.fr-download`) | `dsfrDownload` | **aucune** (`mask: true`) | **geste principal** : URL, Intitulé, Détail |
+
+Compromis assumés :
+
+- **alerte / mise en exergue** : la zone texte est le premier `<p>` du bloc —
+  l'édition inline y est limitée à un paragraphe (inline + liens). Structure
+  DSFR type (titre + un paragraphe) ; un contenu multi-paragraphes existant est
+  préservé (upcast/downcast intacts), seul le premier est éditable en place ;
+- **téléchargement** : le lien (`<a>` + `<span class="fr-download__detail">`
+  imbriqué) est trop fragile pour l'inline — une frappe au mauvais endroit
+  casse l'imbrication. `mask: true` recouvre le widget d'un masque transparent :
+  un clic sélectionne le bloc, tout passe par la popin (double-clic, Entrée,
+  clic droit).
+
+### Tableau (fr-table) : volontairement PAS un widget
+
+Le composant Tableau de la palette reste un simple template. L'encapsuler dans
+un widget casserait l'édition native des tableaux de CKEditor 4 : les plugins
+`table`/`tabletools` (clic droit → ajouter/supprimer ligne ou colonne, fusionner
+des cellules, propriétés du tableau) opèrent sur une sélection **libre** dans le
+document ; à l'intérieur d'un widget, la sélection est confinée aux nested
+editables et le menu contextuel est intercepté par le widget — il faudrait
+déclarer chaque `<td>` comme zone éditable (structure **dynamique**, impossible
+à décrire par des sélecteurs statiques) et réimplémenter la manipulation de
+lignes/colonnes. Perte massive de fonctionnalité pour un gain de protection
+marginal : la structure d'un tableau est moins fragile (supprimer du texte dans
+une cellule ne casse pas le `<table>`) et l'enveloppe `div.fr-table` survit aux
+manipulations natives.
 
 ### Popin d'édition guidée (en complément de l'inline)
 
@@ -188,10 +232,26 @@ dialog: {
 }
 ```
 
-Chaque champ lit à l'ouverture (`setup`) le **texte courant** de l'élément
-`selector` dans le DOM du widget — une édition inline faite juste avant est
-donc reflétée — et à la validation (`commit`) réécrit ce texte **sans toucher
-aux attributs** (`aria-*`, `class`, `type`…).
+Chaque champ lit à l'ouverture (`setup`) l'**état courant** de l'élément
+`selector` (racine du widget si absent) dans le DOM du widget — une édition
+inline faite juste avant est donc reflétée — et à la validation (`commit`) ne
+réécrit **que ce qu'il vise** : les attributs non concernés (`aria-*`, `class`,
+`type`…) restent intacts.
+
+**Capacités génériques d'un champ** (issue #9) — combinables par composant,
+implémentées une seule fois dans la fabrique :
+
+| Clé du champ | Capacité | Utilisée par |
+| --- | --- | --- |
+| *(défaut)* | lit/réécrit le **texte** de l'élément | accordéon, alerte (titre), téléchargement (détail) |
+| `attr: 'href'` | lit/réécrit un **attribut** au lieu du texte | téléchargement (URL) |
+| `ownText: true` | ne touche que les **nœuds texte directs** — les enfants (ex. `<span>` de détail) sont préservés | téléchargement (intitulé) |
+| `optional: {tag, className, editable}` | champ vide → l'élément est **retiré** (zone éditable débranchée) ; rempli → **créé** si absent (premier enfant de la racine) et re-branché comme zone éditable | mise en avant (titre) |
+| `select: [[libellé, classe], …]` | liste déroulante qui **bascule une classe exclusive** sur l'élément | alerte (type) |
+
+La clé `mask: true` d'une entrée `WIDGETS` (hors `dialog`) recouvre le widget
+d'un masque transparent : aucun élément interne n'est cliquable, la popin
+devient le geste d'édition principal (téléchargement).
 
 **Gestes d'ouverture** :
 
@@ -231,6 +291,7 @@ composant à structure sensible (ex. **onglets DSFR**), ajouter :
     requiredContent: 'div(fr-tabs)',
     editables: { … },                 // zones éditables {clé: {selector, allowedContent}}
     idSync: [ … ],                    // option : unicité id + resync aria-*
+    mask: true,                       // option : masque — la popin devient le geste principal
     dialog: { … }                     // option : popin d'édition guidée (cf. supra)
 }
 ```

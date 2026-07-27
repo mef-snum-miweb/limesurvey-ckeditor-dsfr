@@ -25,6 +25,12 @@
  * onglets DSFR), ajouter une entrée — aucun code à dupliquer. Voir
  * docs/architecture.md, section « Widgets CKEditor ».
  *
+ * Alignement (issue #9) : toute la palette Modèles est couverte — accordéon,
+ * mise en avant (callout), alerte, mise en exergue, citation, téléchargement.
+ * Exception assumée : le TABLEAU (fr-table) n'est PAS un widget — l'édition
+ * native des tableaux CKEditor 4 (lignes/colonnes au clic droit) doit rester
+ * fonctionnelle (justification : docs/architecture.md).
+ *
  * Le downcast (HTML enregistré) reste le markup DSFR PROPRE : le système
  * widget retire ses artefacts (wrappers, classes cke_*, poignées) des données.
  */
@@ -37,6 +43,9 @@ CKEDITOR.plugins.add('dsfrwidgets', {
         // <button> n'est pas listé dans CKEDITOR.dtd.$editable : on l'y
         // autorise pour pouvoir en faire une zone éditable imbriquée
         // (pattern documenté CKE4 — nested editable sur élément non standard).
+        // Les autres éléments visés par les zones éditables ci-dessous
+        // (h3, p, div, blockquote, figcaption) sont déjà dans $editable
+        // (vérifié dans le build CKEditor de LimeSurvey 6.16.16).
         CKEDITOR.dtd.$editable.button = 1;
 
         /**
@@ -57,18 +66,42 @@ CKEDITOR.plugins.add('dsfrwidgets', {
          *                     `target` est dupliqué dans le document, un id
          *                     unique est généré et recopié dans les attributs
          *                     `refs` (ex. aria-controls du bouton) ;
+         * - mask            : (option) recouvre le widget d'un masque
+         *                     transparent — aucun élément interne n'est
+         *                     cliquable (utile quand la popin est le geste
+         *                     d'édition principal, ex. téléchargement) ;
          * - dialog          : (option, issue #6) popin d'édition guidée, EN
          *                     COMPLÉMENT de l'édition inline (les nested
          *                     editables restent en place) :
          *                     {title, menuLabel, fields:[{id, label, selector}]}.
-         *                     Chaque champ texte lit/réécrit le TEXTE de
-         *                     l'élément `selector` sans toucher aux attributs.
+         *                     Par défaut, chaque champ texte lit/réécrit le
+         *                     TEXTE de l'élément `selector` (racine du widget
+         *                     si absent) sans toucher aux attributs. Capacités
+         *                     génériques d'un champ (issue #9) :
+         *                     · attr: 'href'    — lit/écrit cet ATTRIBUT au
+         *                       lieu du texte (ex. URL d'un lien) ;
+         *                     · ownText: true   — ne touche que les NŒUDS
+         *                       TEXTE directs de l'élément, ses enfants
+         *                       (ex. <span> de détail) sont préservés ;
+         *                     · optional: {tag, className, editable} — champ
+         *                       vide = l'élément est RETIRÉ ; champ rempli =
+         *                       créé si absent (premier enfant de la racine)
+         *                       et re-branché comme zone éditable `editable` ;
+         *                     · select: [[libellé, classe], …] — liste
+         *                       déroulante qui BASCULE une classe exclusive
+         *                       sur l'élément (ex. type d'alerte fr-alert--*).
          *                     Ouverture : double-clic sur le cadre du widget et
          *                     Entrée sur le widget sélectionné (fournis par le
          *                     plugin natif `widget` dès que la définition a un
          *                     `dialog`), plus clic droit → `menuLabel` (ajouté
          *                     ci-dessous, le plugin widget ne le fournit pas).
          */
+
+        // Règles ACF partagées des zones éditables : inline simple pour les
+        // titres/auteurs, inline + liens pour les textes courants.
+        var INLINE_TITLE = 'br strong em u s sub sup; abbr[title]';
+        var INLINE_TEXT = INLINE_TITLE + '; a[!href,target,rel,title]';
+
         var WIDGETS = [
             {
                 name: 'dsfrAccordion',
@@ -85,7 +118,7 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                     // phrasing content).
                     title: {
                         selector: '.fr-accordion__btn',
-                        allowedContent: 'br strong em u s sub sup; abbr[title]'
+                        allowedContent: INLINE_TITLE
                     },
                     // Contenu repliable : riche (hérite du filtre de l'éditeur).
                     content: {
@@ -109,8 +142,166 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                         }
                     ]
                 }
+            },
+            {
+                // Mise en avant — UN SEUL widget pour les deux variantes de la
+                // palette (avec / sans titre) : la zone titre n'est branchée
+                // que si le h3 existe, et la popin le crée / retire proprement.
+                name: 'dsfrCallout',
+                pathName: 'mise en avant',
+                upcastSelector: { element: 'div', 'class': 'fr-callout' },
+                allowedContent:
+                    'div(fr-callout,fr-callout--*,fr-icon-*); ' +
+                    'h3(fr-callout__title); p(fr-callout__text)',
+                requiredContent: 'div(fr-callout)',
+                editables: {
+                    title: {
+                        selector: '.fr-callout__title',
+                        allowedContent: INLINE_TITLE
+                    },
+                    text: {
+                        selector: '.fr-callout__text',
+                        allowedContent: INLINE_TEXT
+                    }
+                },
+                dialog: {
+                    title: 'Mise en avant',
+                    menuLabel: 'Modifier le titre de la mise en avant',
+                    fields: [
+                        {
+                            id: 'title',
+                            label: 'Titre (laisser vide pour un encadré sans titre)',
+                            selector: '.fr-callout__title',
+                            optional: {
+                                tag: 'h3',
+                                className: 'fr-callout__title',
+                                editable: 'title'
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                // Alerte — UN SEUL widget pour les 4 variantes de la palette :
+                // le type (info/succès/erreur/avertissement) se change via la
+                // popin (select basculant la classe fr-alert--*).
+                name: 'dsfrAlert',
+                pathName: 'alerte',
+                upcastSelector: { element: 'div', 'class': 'fr-alert' },
+                allowedContent: 'div(fr-alert,fr-alert--*); h3(fr-alert__title); p',
+                requiredContent: 'div(fr-alert)',
+                editables: {
+                    title: {
+                        selector: '.fr-alert__title',
+                        allowedContent: INLINE_TITLE
+                    },
+                    // Texte : le premier <p> du bandeau (structure DSFR type
+                    // titre + un paragraphe) — contenu inline, liens compris.
+                    text: {
+                        selector: 'p',
+                        allowedContent: INLINE_TEXT
+                    }
+                },
+                dialog: {
+                    title: 'Alerte',
+                    menuLabel: "Modifier l'alerte (titre, type)",
+                    fields: [
+                        {
+                            id: 'title',
+                            label: 'Titre',
+                            selector: '.fr-alert__title'
+                        },
+                        {
+                            id: 'type',
+                            label: 'Type',
+                            select: [
+                                ['Information', 'fr-alert--info'],
+                                ['Succès', 'fr-alert--success'],
+                                ['Erreur', 'fr-alert--error'],
+                                ['Avertissement', 'fr-alert--warning']
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                // Mise en exergue — widget simple : cadre + zone texte, pas de
+                // popin (aucun réglage à guider).
+                name: 'dsfrHighlight',
+                pathName: 'mise en exergue',
+                upcastSelector: { element: 'div', 'class': 'fr-highlight' },
+                allowedContent: 'div(fr-highlight); p(fr-text--*)',
+                requiredContent: 'div(fr-highlight)',
+                editables: {
+                    text: {
+                        selector: 'p',
+                        allowedContent: INLINE_TEXT
+                    }
+                }
+            },
+            {
+                // Citation — deux zones : texte (blockquote, paragraphes +
+                // inline) et auteur. Pas de popin : les deux zones sont
+                // directement visibles et cliquables.
+                name: 'dsfrQuote',
+                pathName: 'citation',
+                upcastSelector: { element: 'figure', 'class': 'fr-quote' },
+                allowedContent:
+                    'figure(fr-quote,fr-quote--column); blockquote[cite]; ' +
+                    'figcaption; p(fr-quote__author); ul(fr-quote__source); li',
+                requiredContent: 'figure(fr-quote)',
+                editables: {
+                    text: {
+                        selector: 'blockquote',
+                        allowedContent: 'p; ' + INLINE_TEXT
+                    },
+                    author: {
+                        selector: '.fr-quote__author',
+                        allowedContent: INLINE_TITLE
+                    }
+                }
+            },
+            {
+                // Téléchargement — la POPIN est le geste d'édition PRINCIPAL :
+                // le lien (<a> + <span> de détail imbriqué) est trop fragile
+                // pour l'édition inline (une frappe dans la mauvaise zone
+                // casse l'imbrication). `mask` neutralise tout clic interne :
+                // un clic sélectionne le widget, double-clic / Entrée / clic
+                // droit ouvrent la popin (URL, intitulé, détail).
+                name: 'dsfrDownload',
+                pathName: 'téléchargement',
+                upcastSelector: { element: 'div', 'class': 'fr-download' },
+                allowedContent:
+                    'div(fr-download); p; ' +
+                    'a(fr-download__link)[!href,download,hreflang,type]; ' +
+                    'span(fr-download__detail)',
+                requiredContent: 'div(fr-download)',
+                mask: true,
+                dialog: {
+                    title: 'Téléchargement de fichier',
+                    menuLabel: 'Modifier le lien de téléchargement',
+                    fields: [
+                        {
+                            id: 'url',
+                            label: 'URL du fichier',
+                            selector: '.fr-download__link',
+                            attr: 'href'
+                        },
+                        {
+                            id: 'label',
+                            label: 'Intitulé',
+                            selector: '.fr-download__link',
+                            ownText: true
+                        },
+                        {
+                            id: 'detail',
+                            label: 'Détail (format – poids)',
+                            selector: '.fr-download__detail'
+                        }
+                    ]
+                }
             }
-            // Futur composant à structure sensible (ex. onglets DSFR) :
+            // Futur composant à structure sensible (ex. onglets DSFR, #8) :
             // ajouter une entrée ici sur le même modèle.
         ];
 
@@ -146,13 +337,175 @@ CKEDITOR.plugins.add('dsfrwidgets', {
             return spec.name + 'Dialog';
         }
 
+        /** Élément visé par un champ de popin (racine du widget par défaut). */
+        function fieldTarget(widget, field) {
+            return field.selector
+                ? widget.element.findOne(field.selector)
+                : widget.element;
+        }
+
+        /**
+         * Lecture/écriture d'un attribut en tenant compte de la protection
+         * CKEditor 4 : dans le DOM d'édition, la valeur de VÉRITÉ d'attributs
+         * comme `href` ou `src` vit dans `data-cke-saved-<attr>` (le data
+         * processor la restaure au downcast). Écrire seulement l'attribut brut
+         * serait donc écrasé à l'enregistrement.
+         */
+        function getProtectedAttr(el, attr) {
+            return el.getAttribute('data-cke-saved-' + attr)
+                || el.getAttribute(attr) || '';
+        }
+        function setProtectedAttr(el, attr, value) {
+            el.setAttribute(attr, value);
+            if (el.hasAttribute('data-cke-saved-' + attr)) {
+                el.setAttribute('data-cke-saved-' + attr, value);
+            }
+        }
+
+        /** Texte des seuls nœuds texte DIRECTS de `el` (enfants ignorés). */
+        function getOwnText(el) {
+            var text = '';
+            for (var i = 0; i < el.getChildCount(); i++) {
+                var child = el.getChild(i);
+                if (child.type === CKEDITOR.NODE_TEXT) { text += child.getText(); }
+            }
+            return text;
+        }
+
+        /**
+         * Remplace les nœuds texte DIRECTS de `el` par `value`, placé avant le
+         * premier enfant élément — les enfants (ex. <span> de détail d'un lien
+         * de téléchargement) sont préservés à leur place.
+         */
+        function setOwnText(el, value) {
+            for (var i = el.getChildCount() - 1; i >= 0; i--) {
+                var child = el.getChild(i);
+                if (child.type === CKEDITOR.NODE_TEXT) { child.remove(); }
+            }
+            var node = new CKEDITOR.dom.text(value, el.getDocument());
+            var first = el.getFirst();
+            if (first) { node.insertBefore(first); } else { el.append(node); }
+        }
+
+        /**
+         * Commit d'un champ `optional` : vide → l'élément est retiré (et sa
+         * zone éditable débranchée) ; rempli → créé si absent en PREMIER
+         * enfant de la racine du widget, re-branché comme zone éditable
+         * (`optional.editable`) pour que l'édition inline marche sans
+         * rechargement.
+         */
+        function commitOptional(widget, spec, field, el, value) {
+            if (!value) {
+                if (el) {
+                    if (field.optional.editable) {
+                        widget.destroyEditable(field.optional.editable);
+                    }
+                    el.remove();
+                }
+                return;
+            }
+            if (!el) {
+                el = new CKEDITOR.dom.element(
+                    field.optional.tag, widget.element.getDocument());
+                if (field.optional.className) {
+                    el.addClass(field.optional.className);
+                }
+                var first = widget.element.getFirst();
+                if (first) { el.insertBefore(first); }
+                else { widget.element.append(el); }
+                el.setText(value);
+                var key = field.optional.editable;
+                if (key && spec.editables && spec.editables[key]) {
+                    widget.initEditable(key, spec.editables[key]);
+                }
+                return;
+            }
+            if (el.getText() !== value) { el.setText(value); }
+        }
+
+        /**
+         * Champ « select » : liste déroulante qui bascule une classe EXCLUSIVE
+         * (une seule de la liste à la fois) sur l'élément visé — capacité
+         * générique « variante d'un composant » (ex. type d'alerte).
+         */
+        function makeSelectField(field) {
+            return {
+                type: 'select',
+                id: field.id,
+                label: field.label,
+                items: field.select,
+                setup: function (widget) {
+                    var el = fieldTarget(widget, field);
+                    var current = field.select[0][1];
+                    if (el) {
+                        field.select.forEach(function (item) {
+                            if (el.hasClass(item[1])) { current = item[1]; }
+                        });
+                    }
+                    this.setValue(current);
+                },
+                commit: function (widget) {
+                    var el = fieldTarget(widget, field);
+                    var value = this.getValue();
+                    if (!el || el.hasClass(value)) { return; }
+                    field.select.forEach(function (item) {
+                        el.removeClass(item[1]);
+                    });
+                    el.addClass(value);
+                }
+            };
+        }
+
+        /**
+         * Champ texte : selon la capacité déclarée, lit/écrit le texte de
+         * l'élément (défaut), un attribut (`attr`), ses seuls nœuds texte
+         * directs (`ownText`), ou pilote un élément optionnel (`optional`).
+         * Les attributs non visés (`aria-*`, `class`, `type`…) restent intacts.
+         */
+        function makeTextField(spec, field) {
+            return {
+                type: 'text',
+                id: field.id,
+                label: field.label,
+                setup: function (widget) {
+                    var el = fieldTarget(widget, field);
+                    if (!el) { this.setValue(''); return; }
+                    if (field.attr) {
+                        this.setValue(getProtectedAttr(el, field.attr));
+                    } else if (field.ownText) {
+                        this.setValue(getOwnText(el));
+                    } else {
+                        this.setValue(el.getText());
+                    }
+                },
+                commit: function (widget) {
+                    var el = fieldTarget(widget, field);
+                    var value = this.getValue();
+                    if (field.optional) {
+                        commitOptional(widget, spec, field, el, CKEDITOR.tools.trim(value));
+                        return;
+                    }
+                    if (!el) { return; }
+                    if (field.attr) {
+                        if (getProtectedAttr(el, field.attr) !== value) {
+                            setProtectedAttr(el, field.attr, value);
+                        }
+                    } else if (field.ownText) {
+                        if (getOwnText(el) !== value) { setOwnText(el, value); }
+                    } else if (el.getText() !== value) {
+                        el.setText(value);
+                    }
+                }
+            };
+        }
+
         /**
          * Enregistre la popin d'édition déclarée par `spec.dialog` : un champ
-         * texte par entrée de `fields`. Le plugin natif `widget` appelle
-         * `setupContent(widget)` à CHAQUE ouverture et `commitContent(widget)`
-         * au OK : `setup` lit donc le DOM COURANT du widget (une édition
-         * inline faite juste avant est reflétée), `commit` réécrit le texte de
-         * l'élément visé — attributs (`aria-*`, `class`, `type`…) intacts.
+         * par entrée de `fields` (texte par défaut, `select` si déclaré). Le
+         * plugin natif `widget` appelle `setupContent(widget)` à CHAQUE
+         * ouverture et `commitContent(widget)` au OK : `setup` lit donc le DOM
+         * COURANT du widget (une édition inline faite juste avant est
+         * reflétée), `commit` ne réécrit que ce que le champ vise.
          * Registre global CKEDITOR : idempotent entre instances d'éditeur.
          */
         function registerDialog(spec) {
@@ -166,21 +519,9 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                     contents: [{
                         id: 'main',
                         elements: spec.dialog.fields.map(function (field) {
-                            return {
-                                type: 'text',
-                                id: field.id,
-                                label: field.label,
-                                setup: function (widget) {
-                                    var el = widget.element.findOne(field.selector);
-                                    this.setValue(el ? el.getText() : '');
-                                },
-                                commit: function (widget) {
-                                    var el = widget.element.findOne(field.selector);
-                                    if (el && el.getText() !== this.getValue()) {
-                                        el.setText(this.getValue());
-                                    }
-                                }
-                            };
+                            return field.select
+                                ? makeSelectField(field)
+                                : makeTextField(spec, field);
                         })
                     }]
                 };
@@ -237,6 +578,7 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                 allowedContent: spec.allowedContent,
                 requiredContent: spec.requiredContent,
                 editables: spec.editables,
+                mask: spec.mask,
                 // Lier la popin ici suffit pour que le plugin natif `widget`
                 // l'ouvre au double-clic sur le cadre (hors zones éditables —
                 // il y consomme le double-clic, voulu : l'inline y prime) et
