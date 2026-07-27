@@ -27,6 +27,25 @@ CKEDITOR.addTemplates('dsfr', {
                 '</section><p>&nbsp;</p>'
         },
 
+        /* --- Onglets --- */
+        {
+            title: 'Onglets',
+            description: 'Onglets DSFR (fr-tabs), 2 onglets. En édition les panneaux sont affichés empilés ; double-clic sur le cadre pour gérer les onglets (renommer, ajouter, supprimer).',
+            html:
+                '<div class="fr-tabs">' +
+                '<ul class="fr-tabs__list" role="tablist" aria-label="Onglets">' +
+                '<li role="presentation">' +
+                '<button type="button" id="fr-tabs-tab-1" class="fr-tabs__tab" tabindex="0" role="tab" aria-selected="true" aria-controls="fr-tabs-tab-1-panel">Libellé de l’onglet 1</button>' +
+                '</li>' +
+                '<li role="presentation">' +
+                '<button type="button" id="fr-tabs-tab-2" class="fr-tabs__tab" tabindex="-1" role="tab" aria-selected="false" aria-controls="fr-tabs-tab-2-panel">Libellé de l’onglet 2</button>' +
+                '</li>' +
+                '</ul>' +
+                '<div id="fr-tabs-tab-1-panel" class="fr-tabs__panel fr-tabs__panel--selected" role="tabpanel" aria-labelledby="fr-tabs-tab-1" tabindex="0"><p>Contenu de l’onglet 1.</p></div>' +
+                '<div id="fr-tabs-tab-2-panel" class="fr-tabs__panel" role="tabpanel" aria-labelledby="fr-tabs-tab-2" tabindex="0"><p>Contenu de l’onglet 2.</p></div>' +
+                '</div><p>&nbsp;</p>'
+        },
+
         /* --- Mise en avant (callout) --- */
         {
             title: 'Mise en avant — avec titre',

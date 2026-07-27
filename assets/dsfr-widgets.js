@@ -94,7 +94,19 @@ CKEDITOR.plugins.add('dsfrwidgets', {
          *                     Entrée sur le widget sélectionné (fournis par le
          *                     plugin natif `widget` dès que la définition a un
          *                     `dialog`), plus clic droit → `menuLabel` (ajouté
-         *                     ci-dessous, le plugin widget ne le fournit pas).
+         *                     ci-dessous, le plugin widget ne le fournit pas) ;
+         * - collection      : (option, issue #8) COLLECTION D'ÉLÉMENTS
+         *                     RÉPÉTABLES — paires (porteur de libellé, panneau
+         *                     de contenu) en nombre variable (ex. onglets).
+         *                     Les zones éditables sont branchées DYNAMIQUEMENT
+         *                     (une par libellé + une par panneau, initEditable
+         *                     au `init` du widget), les ids/aria recâblés à
+         *                     chaque init (unicité dans le document), et la
+         *                     popin déclarée par `dialog` devient une popin de
+         *                     GESTION : renommer, ajouter, supprimer (avec
+         *                     confirmation intégrée si le panneau a du
+         *                     contenu), minimum `min` éléments. Clés : voir
+         *                     l'entrée dsfrTabs et docs/architecture.md.
          */
 
         // Règles ACF partagées des zones éditables : inline simple pour les
@@ -300,9 +312,64 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                         }
                     ]
                 }
+            },
+            {
+                // Onglets (issue #8) — collection d'onglets en nombre variable.
+                // EN ÉDITION : les panneaux sont affichés EMPILÉS (comme
+                // l'accordéon apparaît déplié), chacun est une zone éditable
+                // riche ; la barre d'onglets est du chrome dont seuls les
+                // libellés (boutons) sont éditables en place. La POPIN est le
+                // geste principal pour la STRUCTURE : renommer, ajouter,
+                // supprimer un onglet (min 2), ids/aria resynchronisés à la
+                // validation. AU RENDU : markup fr-tabs pur, le JS DSFR du
+                // thème rend les onglets fonctionnels côté répondant.
+                // Convention : au downcast, le PREMIER onglet est l'actif
+                // (aria-selected/tabindex/--selected posés par le recâblage).
+                name: 'dsfrTabs',
+                pathName: 'onglets',
+                upcastSelector: { element: 'div', 'class': 'fr-tabs' },
+                allowedContent:
+                    'div(fr-tabs); ul(fr-tabs__list)[role,aria-label]; li[role]; ' +
+                    'button(fr-tabs__tab)[id,type,role,tabindex,aria-selected,aria-controls]; ' +
+                    'div(fr-tabs__panel,fr-tabs__panel--selected)[id,role,tabindex,aria-labelledby]',
+                requiredContent: 'div(fr-tabs)',
+                collection: {
+                    itemName: 'onglet',                 // libellés UI de la popin
+                    min: 2,
+                    labelSelector: '.fr-tabs__tab',     // porteurs de libellé (ordre = panneaux)
+                    panelSelector: '.fr-tabs__panel',   // panneaux de contenu appariés
+                    listSelector: '.fr-tabs__list',     // conteneur (chrome) reconstruit au commit
+                    idPrefix: 'fr-tabs-tab',            // base de génération d'ids uniques
+                    panelIdSuffix: '-panel',            // id panneau = id libellé + suffixe
+                    // Gabarits d'un nouvel élément (libellé posé par la popin ;
+                    // ids/aria posés par le recâblage) :
+                    itemHtml: '<li role="presentation"><button type="button" class="fr-tabs__tab" role="tab"></button></li>',
+                    panelHtml: '<div class="fr-tabs__panel" role="tabpanel" tabindex="0"><p>Contenu de l’onglet.</p></div>',
+                    // Zones éditables dynamiques : libellés inline simple,
+                    // panneaux riches (héritent du filtre de l'éditeur).
+                    labelEditable: { allowedContent: INLINE_TITLE },
+                    panelEditable: {},
+                    // Invariants réappliqués à chaque recâblage — le premier
+                    // élément est l'actif, les autres sont désactivés :
+                    wire: {
+                        labelAttrs: { type: 'button', role: 'tab' },
+                        activeLabelAttrs: { 'aria-selected': 'true', tabindex: '0' },
+                        inactiveLabelAttrs: { 'aria-selected': 'false', tabindex: '-1' },
+                        labelRefAttr: 'aria-controls',      // libellé → id du panneau
+                        panelAttrs: { role: 'tabpanel', tabindex: '0' },
+                        panelRefAttr: 'aria-labelledby',    // panneau → id du libellé
+                        activePanelClass: 'fr-tabs__panel--selected'
+                    }
+                },
+                dialog: {
+                    title: 'Onglets',
+                    menuLabel: 'Gérer les onglets (renommer, ajouter, supprimer)'
+                    // Pas de `fields` : la popin est générée par la capacité
+                    // `collection` (liste des libellés + ajout / suppression).
+                }
             }
-            // Futur composant à structure sensible (ex. onglets DSFR, #8) :
-            // ajouter une entrée ici sur le même modèle.
+            // Futur composant à structure sensible : ajouter une entrée ici
+            // sur le même modèle.
         ];
 
         /**
@@ -335,6 +402,278 @@ CKEDITOR.plugins.add('dsfrwidgets', {
         /** Nom (global CKEDITOR) de la popin d'un widget. */
         function dialogName(spec) {
             return spec.name + 'Dialog';
+        }
+
+        /* ------------------------------------------------------------------
+         * Capacité « collection » (issue #8) — éléments répétables appariés
+         * (libellé, panneau), en nombre variable. Générique : tout composant
+         * structuré en « liste de déclencheurs + panneaux de contenu » peut la
+         * déclarer (onglets aujourd'hui, groupe d'accordéons demain).
+         * ------------------------------------------------------------------ */
+
+        /** Nom réservé des zones éditables dynamiques d'une collection. */
+        var COLLECTION_EDITABLE = /^(label|panel)\d+$/;
+
+        /**
+         * Recâble une collection : ids uniques DANS LE DOCUMENT (couvre
+         * l'insertion de plusieurs blocs depuis la palette — tous arrivent
+         * avec les mêmes ids), appariement libellé ↔ panneau
+         * (`labelRefAttr` / `panelRefAttr`), et état actif/inactif — par
+         * convention le PREMIER élément est l'actif au downcast.
+         */
+        function wireCollection(widget, col) {
+            var doc = widget.element.getDocument();
+            var labels = widget.element.find(col.labelSelector).toArray();
+            var panels = widget.element.find(col.panelSelector).toArray();
+            var suffix = col.panelIdSuffix;
+
+            /** `id` déjà porté par un AUTRE élément que `owner` ? */
+            function taken(id, owner) {
+                var found = doc.find('[id="' + id + '"]');
+                for (var i = 0; i < found.count(); i++) {
+                    if (!found.getItem(i).equals(owner)) { return true; }
+                }
+                return false;
+            }
+            function freeId(label, panel) {
+                var n = 1;
+                var id;
+                do { id = col.idPrefix + '-' + n++; }
+                while (taken(id, label) || taken(id + suffix, panel));
+                return id;
+            }
+
+            labels.forEach(function (label, i) {
+                var panel = panels[i];
+                if (!panel) { return; }
+                var id = label.getAttribute('id');
+                var panelId = panel.getAttribute('id');
+                // Libellé sans id (barre reconstruite par la popin) : retrouver
+                // la base depuis l'id du panneau conservé.
+                if (!id && panelId && panelId.slice(-suffix.length) === suffix) {
+                    id = panelId.slice(0, -suffix.length);
+                }
+                if (!id || taken(id, label) || taken(id + suffix, panel)) {
+                    id = freeId(label, panel);
+                }
+                label.setAttribute('id', id);
+                panel.setAttribute('id', id + suffix);
+                label.setAttributes(col.wire.labelAttrs);
+                label.setAttributes(i === 0
+                    ? col.wire.activeLabelAttrs : col.wire.inactiveLabelAttrs);
+                label.setAttribute(col.wire.labelRefAttr, id + suffix);
+                panel.setAttributes(col.wire.panelAttrs);
+                panel.setAttribute(col.wire.panelRefAttr, id);
+                panel[i === 0 ? 'addClass' : 'removeClass'](col.wire.activePanelClass);
+            });
+        }
+
+        /**
+         * (Re)branche les zones éditables dynamiques d'une collection — une
+         * par panneau (riche) et, si `labelEditable` est déclaré, une par
+         * libellé (inline). Les zones sont détruites puis réinitialisées pour
+         * que le registre `widget.editables` reste cohérent avec le DOM (le
+         * downcast s'appuie dessus pour nettoyer les artefacts cke_*).
+         * À appeler APRÈS wireCollection : les sélecteurs s'ancrent sur les ids.
+         */
+        function syncCollectionEditables(widget, spec) {
+            var col = spec.collection;
+            var name;
+            for (name in widget.editables) {
+                if (COLLECTION_EDITABLE.test(name)) { widget.destroyEditable(name); }
+            }
+            widget.element.find(col.panelSelector).toArray().forEach(function (panel, i) {
+                widget.initEditable('panel' + i, CKEDITOR.tools.extend({
+                    selector: '[id="' + panel.getAttribute('id') + '"]'
+                }, col.panelEditable));
+            });
+            if (col.labelEditable) {
+                widget.element.find(col.labelSelector).toArray().forEach(function (label, i) {
+                    widget.initEditable('label' + i, CKEDITOR.tools.extend({
+                        selector: '[id="' + label.getAttribute('id') + '"]'
+                    }, col.labelEditable));
+                });
+            }
+        }
+
+        /** Un panneau « a du contenu » : texte non vide ou média embarqué. */
+        function panelHasContent(panel) {
+            var text = panel.getText().replace(/\u00a0/g, ' ');
+            return !!CKEDITOR.tools.trim(text)
+                || !!panel.findOne('img,table,iframe,video,audio,object,embed');
+        }
+
+        /**
+         * Applique l'état de la popin de collection au widget : les panneaux
+         * des éléments CONSERVÉS gardent leur nœud DOM (contenu riche intact),
+         * les nouveaux sont créés depuis `panelHtml`, les supprimés retirés ;
+         * la barre de libellés (chrome) est reconstruite depuis `itemHtml` ;
+         * puis recâblage ids/aria et re-branchement des zones éditables.
+         * L'appelant (plugin widget) encadre déjà l'opération de deux
+         * saveSnapshot — l'annulation restaure l'état complet.
+         */
+        function commitCollection(widget, spec, rows) {
+            var col = spec.collection;
+            var doc = widget.element.getDocument();
+            var oldPanels = widget.element.find(col.panelSelector).toArray();
+            var name;
+
+            for (name in widget.editables) {
+                if (COLLECTION_EDITABLE.test(name)) { widget.destroyEditable(name); }
+            }
+
+            var kept = {};
+            var finalPanels = rows.map(function (row) {
+                if (row.panelIndex !== null && oldPanels[row.panelIndex]) {
+                    kept[row.panelIndex] = true;
+                    return oldPanels[row.panelIndex];
+                }
+                return CKEDITOR.dom.element.createFromHtml(col.panelHtml, doc);
+            });
+            oldPanels.forEach(function (panel, i) {
+                if (!kept[i]) { panel.remove(); }
+            });
+            // append() déplace les nœuds existants : la liste reste en tête,
+            // les panneaux suivent dans l'ordre de la popin.
+            finalPanels.forEach(function (panel) { widget.element.append(panel); });
+
+            var list = widget.element.findOne(col.listSelector);
+            list.setHtml('');
+            rows.forEach(function (row) {
+                var item = CKEDITOR.dom.element.createFromHtml(col.itemHtml, doc);
+                var label = item.findOne(col.labelSelector) || item;
+                label.setText(CKEDITOR.tools.trim(row.label)
+                    || (col.itemName.charAt(0).toUpperCase() + col.itemName.slice(1)));
+                list.append(item);
+            });
+
+            wireCollection(widget, col);
+            syncCollectionEditables(widget, spec);
+        }
+
+        /**
+         * Popin de GESTION d'une collection (générée quand l'entrée déclare
+         * `collection`) : une ligne par élément (champ libellé + Supprimer),
+         * bouton d'ajout, minimum `col.min` éléments. La suppression d'un
+         * élément dont le panneau a du contenu bascule la ligne en
+         * CONFIRMATION INTÉGRÉE à la popin (jamais de confirm() natif).
+         * L'état vit dans `_rows` de l'élément html du dialogue :
+         * [{label, panelIndex|null, hasContent, confirming}] — panelIndex null
+         * = nouvel élément (panneau créé au commit).
+         */
+        function registerCollectionDialog(spec) {
+            var name = dialogName(spec);
+            if (CKEDITOR.dialog.exists(name)) { return; }
+            var col = spec.collection;
+            var itemName = col.itemName;
+
+            function render(uiEl) {
+                var rows = uiEl._rows;
+                var container = uiEl.getElement().$;
+                var doc = container.ownerDocument;
+                container.innerHTML = '';
+
+                function button(text, onclick) {
+                    var b = doc.createElement('button');
+                    b.type = 'button';
+                    b.appendChild(doc.createTextNode(text));
+                    b.style.cssText = 'padding:4px 10px;cursor:pointer;';
+                    b.onclick = onclick;
+                    return b;
+                }
+
+                rows.forEach(function (row, i) {
+                    var line = doc.createElement('div');
+                    line.style.cssText =
+                        'display:flex;align-items:center;gap:8px;margin:0 0 8px;';
+                    if (row.confirming) {
+                        var msg = doc.createElement('span');
+                        msg.style.cssText = 'flex:1;color:#b34000;';
+                        msg.appendChild(doc.createTextNode(
+                            'Le panneau de « ' + (CKEDITOR.tools.trim(row.label) || itemName + ' ' + (i + 1))
+                            + ' » n’est pas vide. Supprimer quand même ?'));
+                        line.appendChild(msg);
+                        line.appendChild(button('Supprimer', function () {
+                            rows.splice(i, 1);
+                            render(uiEl);
+                        }));
+                        line.appendChild(button('Annuler', function () {
+                            row.confirming = false;
+                            render(uiEl);
+                        }));
+                    } else {
+                        var input = doc.createElement('input');
+                        input.type = 'text';
+                        input.value = row.label;
+                        input.setAttribute('aria-label',
+                            'Libellé de l’' + itemName + ' ' + (i + 1));
+                        input.style.cssText = 'flex:1;min-width:0;padding:4px 6px;';
+                        input.oninput = function () { row.label = input.value; };
+                        line.appendChild(input);
+                        var del = button('Supprimer', function () {
+                            if (row.hasContent) {
+                                row.confirming = true;
+                            } else {
+                                rows.splice(i, 1);
+                            }
+                            render(uiEl);
+                        });
+                        if (rows.length <= col.min) {
+                            del.disabled = true;
+                            del.title = 'Minimum : ' + col.min + ' ' + itemName + 's';
+                        }
+                        line.appendChild(del);
+                    }
+                    container.appendChild(line);
+                });
+
+                var add = button('Ajouter un ' + itemName, function () {
+                    rows.push({
+                        label: '', panelIndex: null,
+                        hasContent: false, confirming: false
+                    });
+                    render(uiEl);
+                    var inputs = container.getElementsByTagName('input');
+                    if (inputs.length) { inputs[inputs.length - 1].focus(); }
+                });
+                add.style.marginTop = '4px';
+                container.appendChild(add);
+            }
+
+            CKEDITOR.dialog.add(name, function () {
+                return {
+                    title: spec.dialog.title,
+                    minWidth: 420,
+                    minHeight: 120,
+                    contents: [{
+                        id: 'main',
+                        elements: [{
+                            type: 'html',
+                            id: 'items',
+                            html: '<div></div>',
+                            setup: function (widget) {
+                                var panels = widget.element
+                                    .find(col.panelSelector).toArray();
+                                this._rows = widget.element
+                                    .find(col.labelSelector).toArray()
+                                    .map(function (label, i) {
+                                        return {
+                                            label: label.getText(),
+                                            panelIndex: panels[i] ? i : null,
+                                            hasContent: panels[i]
+                                                ? panelHasContent(panels[i]) : false,
+                                            confirming: false
+                                        };
+                                    });
+                                render(this);
+                            },
+                            commit: function (widget) {
+                                commitCollection(widget, spec, this._rows);
+                            }
+                        }]
+                    }]
+                };
+            });
         }
 
         /** Élément visé par un champ de popin (racine du widget par défaut). */
@@ -590,6 +929,14 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                 },
                 init: function () {
                     if (spec.idSync) { syncUniqueIds(this, spec.idSync); }
+                    // Collection : recâblage (ids uniques document + aria)
+                    // puis branchement des zones éditables dynamiques — le
+                    // plugin widget a déjà traité les editables STATIQUES
+                    // (setupEditables) avant d'appeler init().
+                    if (spec.collection) {
+                        wireCollection(this, spec.collection);
+                        syncCollectionEditables(this, spec);
+                    }
                 }
             };
         }
@@ -600,7 +947,8 @@ CKEDITOR.plugins.add('dsfrwidgets', {
 
         WIDGETS.forEach(function (spec) {
             if (spec.dialog) {
-                registerDialog(spec);
+                if (spec.collection) { registerCollectionDialog(spec); }
+                else { registerDialog(spec); }
                 if (editor.contextMenu) { registerContextMenu(spec); }
             }
             editor.widgets.add(spec.name, buildDefinition(spec));
