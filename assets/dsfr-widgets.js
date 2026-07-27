@@ -142,6 +142,164 @@ CKEDITOR.plugins.add('dsfrwidgets', {
                         }
                     ]
                 }
+            },
+            {
+                // Mise en avant — UN SEUL widget pour les deux variantes de la
+                // palette (avec / sans titre) : la zone titre n'est branchée
+                // que si le h3 existe, et la popin le crée / retire proprement.
+                name: 'dsfrCallout',
+                pathName: 'mise en avant',
+                upcastSelector: { element: 'div', 'class': 'fr-callout' },
+                allowedContent:
+                    'div(fr-callout,fr-callout--*,fr-icon-*); ' +
+                    'h3(fr-callout__title); p(fr-callout__text)',
+                requiredContent: 'div(fr-callout)',
+                editables: {
+                    title: {
+                        selector: '.fr-callout__title',
+                        allowedContent: INLINE_TITLE
+                    },
+                    text: {
+                        selector: '.fr-callout__text',
+                        allowedContent: INLINE_TEXT
+                    }
+                },
+                dialog: {
+                    title: 'Mise en avant',
+                    menuLabel: 'Modifier le titre de la mise en avant',
+                    fields: [
+                        {
+                            id: 'title',
+                            label: 'Titre (laisser vide pour un encadré sans titre)',
+                            selector: '.fr-callout__title',
+                            optional: {
+                                tag: 'h3',
+                                className: 'fr-callout__title',
+                                editable: 'title'
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                // Alerte — UN SEUL widget pour les 4 variantes de la palette :
+                // le type (info/succès/erreur/avertissement) se change via la
+                // popin (select basculant la classe fr-alert--*).
+                name: 'dsfrAlert',
+                pathName: 'alerte',
+                upcastSelector: { element: 'div', 'class': 'fr-alert' },
+                allowedContent: 'div(fr-alert,fr-alert--*); h3(fr-alert__title); p',
+                requiredContent: 'div(fr-alert)',
+                editables: {
+                    title: {
+                        selector: '.fr-alert__title',
+                        allowedContent: INLINE_TITLE
+                    },
+                    // Texte : le premier <p> du bandeau (structure DSFR type
+                    // titre + un paragraphe) — contenu inline, liens compris.
+                    text: {
+                        selector: 'p',
+                        allowedContent: INLINE_TEXT
+                    }
+                },
+                dialog: {
+                    title: 'Alerte',
+                    menuLabel: "Modifier l'alerte (titre, type)",
+                    fields: [
+                        {
+                            id: 'title',
+                            label: 'Titre',
+                            selector: '.fr-alert__title'
+                        },
+                        {
+                            id: 'type',
+                            label: 'Type',
+                            select: [
+                                ['Information', 'fr-alert--info'],
+                                ['Succès', 'fr-alert--success'],
+                                ['Erreur', 'fr-alert--error'],
+                                ['Avertissement', 'fr-alert--warning']
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                // Mise en exergue — widget simple : cadre + zone texte, pas de
+                // popin (aucun réglage à guider).
+                name: 'dsfrHighlight',
+                pathName: 'mise en exergue',
+                upcastSelector: { element: 'div', 'class': 'fr-highlight' },
+                allowedContent: 'div(fr-highlight); p(fr-text--*)',
+                requiredContent: 'div(fr-highlight)',
+                editables: {
+                    text: {
+                        selector: 'p',
+                        allowedContent: INLINE_TEXT
+                    }
+                }
+            },
+            {
+                // Citation — deux zones : texte (blockquote, paragraphes +
+                // inline) et auteur. Pas de popin : les deux zones sont
+                // directement visibles et cliquables.
+                name: 'dsfrQuote',
+                pathName: 'citation',
+                upcastSelector: { element: 'figure', 'class': 'fr-quote' },
+                allowedContent:
+                    'figure(fr-quote,fr-quote--column); blockquote[cite]; ' +
+                    'figcaption; p(fr-quote__author); ul(fr-quote__source); li',
+                requiredContent: 'figure(fr-quote)',
+                editables: {
+                    text: {
+                        selector: 'blockquote',
+                        allowedContent: 'p; ' + INLINE_TEXT
+                    },
+                    author: {
+                        selector: '.fr-quote__author',
+                        allowedContent: INLINE_TITLE
+                    }
+                }
+            },
+            {
+                // Téléchargement — la POPIN est le geste d'édition PRINCIPAL :
+                // le lien (<a> + <span> de détail imbriqué) est trop fragile
+                // pour l'édition inline (une frappe dans la mauvaise zone
+                // casse l'imbrication). `mask` neutralise tout clic interne :
+                // un clic sélectionne le widget, double-clic / Entrée / clic
+                // droit ouvrent la popin (URL, intitulé, détail).
+                name: 'dsfrDownload',
+                pathName: 'téléchargement',
+                upcastSelector: { element: 'div', 'class': 'fr-download' },
+                allowedContent:
+                    'div(fr-download); p; ' +
+                    'a(fr-download__link)[!href,download,hreflang,type]; ' +
+                    'span(fr-download__detail)',
+                requiredContent: 'div(fr-download)',
+                mask: true,
+                dialog: {
+                    title: 'Téléchargement de fichier',
+                    menuLabel: 'Modifier le lien de téléchargement',
+                    fields: [
+                        {
+                            id: 'url',
+                            label: 'URL du fichier',
+                            selector: '.fr-download__link',
+                            attr: 'href'
+                        },
+                        {
+                            id: 'label',
+                            label: 'Intitulé',
+                            selector: '.fr-download__link',
+                            ownText: true
+                        },
+                        {
+                            id: 'detail',
+                            label: 'Détail (format – poids)',
+                            selector: '.fr-download__detail'
+                        }
+                    ]
+                }
             }
             // Futur composant à structure sensible (ex. onglets DSFR, #8) :
             // ajouter une entrée ici sur le même modèle.
