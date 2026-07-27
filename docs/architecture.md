@@ -80,7 +80,8 @@ publie ses assets et injecte deux scripts dans `<head>` :
 ```
 CKEDITOR.on('instanceCreated', ({editor}) => {
   editor.on('configLoaded', () => {
-    editor.config.extraPlugins   = (editor.config.extraPlugins || '') + ',templates';
+    editor.config.extraPlugins   = (editor.config.extraPlugins || '') + ',templates,dsfrwidgets';
+    CKEDITOR.plugins.addExternal('dsfrwidgets', assetUrl + '/dsfr-widgets.js?v=' + v, '');
     editor.config.stylesSet      = 'dsfr:' + assetUrl + '/dsfr-styles.js?v=' + v;
     editor.config.templates_files= [assetUrl + '/dsfr-templates.js?v=' + v];
     editor.config.contentsCss    = [...contentsCss, assetUrl + '/dsfr-contents.css?v=' + v];
@@ -93,6 +94,67 @@ CKEDITOR.on('instanceCreated', ({editor}) => {
 des plugins CKEditor : la fenêtre exacte pour ajouter proprement `templates`,
 `stylesSet` et `contentsCss` sans écraser la config LimeSurvey
 (`limereplacementfields`, `lsswitchtoolbars`, toolbars par défaut).
+
+## Widgets CKEditor : structure protégée, zones éditables
+
+### Pourquoi
+
+Certains composants DSFR reposent sur une **structure HTML stricte** dont la
+casse est silencieuse pour le contributeur. Cas fondateur (issue #3) :
+l'accordéon (`section > h3 > button.fr-accordion__btn + div.fr-collapse`). Dans
+un éditeur classique, une sélection de texte trop large (triple-clic, Ctrl+A,
+glisser) englobe le `<button>` lui-même : taper du texte **supprime le bouton**
+et casse l'accordéon sans message.
+
+### Comment
+
+`assets/dsfr-widgets.js` déclare un plugin CKEditor 4 (`dsfrwidgets`) fondé sur
+le système de **widgets** (plugin natif `widget` + `lineutils`, embarqués dans
+le build CKEditor de LimeSurvey — seul `dsfrwidgets` est externe, enregistré
+via `CKEDITOR.plugins.addExternal` depuis `ckeditor-dsfr.js`). Un widget :
+
+- rend la structure **atomique** : insupprimable par une sélection de texte,
+  déplaçable/supprimable uniquement en sélectionnant le bloc entier (cadre +
+  poignée) ;
+- ouvre des **zones éditables imbriquées** (*nested editables*) là où le
+  contributeur doit saisir : pour l'accordéon, l'intitulé (`.fr-accordion__btn`,
+  contenu limité à de l'inline simple) et le contenu (`.fr-collapse`, riche) ;
+- garde un **downcast propre** : le HTML enregistré est le markup DSFR exact,
+  sans artefact widget (wrappers et classes `cke_*` retirés des données) ;
+- s'**upcaste automatiquement** : les accordéons existants en base sont
+  reconnus au chargement, et l'insertion via la palette Modèles passe par
+  `insertHtml` → data processor → upcast.
+
+Particularité : `<button>` n'est pas éditable par défaut dans CKEditor 4 — le
+plugin l'autorise via `CKEDITOR.dtd.$editable.button = 1` (pattern documenté
+CKE4 pour les nested editables sur éléments non standard).
+
+Bonus : à l'initialisation d'un widget, si l'`id` de sa zone repliable est déjà
+présent dans le document (insertion de plusieurs accordéons), un id unique est
+généré et `aria-controls` resynchronisé — plus de correction manuelle.
+
+### Ajouter un composant (pattern réutilisable)
+
+Le fichier est **déclaratif** : chaque composant protégé est une entrée du
+tableau `WIDGETS` de `dsfr-widgets.js` — aucun code à dupliquer. Pour un futur
+composant à structure sensible (ex. **onglets DSFR**), ajouter :
+
+```js
+{
+    name: 'dsfrTabs',                 // nom unique du widget
+    pathName: 'onglets',              // libellé du fil d'Ariane de l'éditeur
+    upcastSelector: { element: 'div', 'class': 'fr-tabs' },
+    allowedContent: '…',              // règles ACF (classes, aria-*, id…)
+    requiredContent: 'div(fr-tabs)',
+    editables: { … },                 // zones éditables {clé: {selector, allowedContent}}
+    idSync: [ … ]                     // option : unicité id + resync aria-*
+}
+```
+
+Si une zone éditable vise un élément absent de `CKEDITOR.dtd.$editable`
+(`button`, etc.), l'y ajouter en tête de `init` comme pour l'accordéon. Ne pas
+oublier d'ajouter tout nouveau fichier d'asset à la liste du cache-buster dans
+`CKEditorDSFR.php`.
 
 ## Packaging & release
 
