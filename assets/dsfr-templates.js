@@ -17,7 +17,7 @@ CKEDITOR.addTemplates('dsfr', {
         /* --- Accordéon --- */
         {
             title: 'Accordéon',
-            description: 'Section repliable DSFR. Si plusieurs accordéons, modifier l’identifiant (id / aria-controls).',
+            description: 'Section repliable DSFR. Intitulé et contenu éditables en place ; double-clic sur le cadre pour la popin (identifiants gérés automatiquement).',
             html:
                 '<section class="fr-accordion">' +
                 '<h3 class="fr-accordion__title">' +
@@ -118,7 +118,7 @@ CKEDITOR.addTemplates('dsfr', {
         /* --- Téléchargement de fichier --- */
         {
             title: 'Téléchargement de fichier',
-            description: 'Lien de téléchargement DSFR (fr-download). Modifier l’URL, le titre et le détail (format – poids).',
+            description: 'Lien de téléchargement DSFR (fr-download). Double-clic sur le bloc inséré pour saisir l’URL, l’intitulé et le détail (format – poids).',
             html:
                 '<div class="fr-download">' +
                 '<p><a href="[URL-du-fichier]" download class="fr-download__link">' +
