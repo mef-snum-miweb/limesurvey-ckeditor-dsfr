@@ -171,6 +171,51 @@ Bonus : à l'initialisation d'un widget, si l'`id` de sa zone repliable est déj
 présent dans le document (insertion de plusieurs accordéons), un id unique est
 généré et `aria-controls` resynchronisé — plus de correction manuelle.
 
+### Popin d'édition guidée (en complément de l'inline)
+
+Retour terrain (issue #6) : le widget protège, mais l'édition inline du titre
+n'est pas un geste évident pour un contributeur occasionnel. Chaque widget peut
+donc déclarer une **popin d'édition** via la clé optionnelle `dialog` de son
+entrée du tableau `WIDGETS` :
+
+```js
+dialog: {
+    title: 'Accordéon',                                   // titre de la popin
+    menuLabel: "Modifier l'intitulé de l'accordéon",      // entrée du clic droit
+    fields: [                                             // un champ texte par entrée
+        { id: 'title', label: "Intitulé de l'accordéon", selector: '.fr-accordion__btn' }
+    ]
+}
+```
+
+Chaque champ lit à l'ouverture (`setup`) le **texte courant** de l'élément
+`selector` dans le DOM du widget — une édition inline faite juste avant est
+donc reflétée — et à la validation (`commit`) réécrit ce texte **sans toucher
+aux attributs** (`aria-*`, `class`, `type`…).
+
+**Gestes d'ouverture** :
+
+- **double-clic sur le cadre** du widget et **Entrée** sur le widget
+  sélectionné — fournis automatiquement par le plugin natif `widget` dès que la
+  définition porte une propriété `dialog` (la fabrique `buildDefinition` la
+  renseigne). Dans les zones éditables imbriquées, le double-clic reste un
+  geste de sélection de texte (consommé par CKEditor) : voulu, l'inline y
+  prime ;
+- **clic droit** → entrée `menuLabel` — PAS fournie par le plugin `widget` (son
+  listener contextmenu ne matche que le wrapper et relaie vers l'événement
+  `contextMenu` du widget, vide par défaut) : la fabrique ajoute commande,
+  item de menu (groupe `dsfrwidgets`) et un listener qui remonte au widget
+  depuis n'importe quel descendant cliqué, zones éditables comprises. Le
+  plugin `contextmenu` est dans le build LimeSurvey ; en son absence, la popin
+  resterait accessible par double-clic et Entrée.
+
+**Philosophie : inline pour les habitués, popin pour le geste guidé.** La popin
+ne remplace pas les nested editables — la zone titre reste éditable au clic ;
+elle offre un chemin explicite (libellé, champ, OK/Annuler) à qui ne devine pas
+que le texte du bouton est modifiable en place. Limite assumée : le champ est
+en texte brut — valider la popin remplace un éventuel balisage inline du titre
+(`<strong>`…) par du texte simple.
+
 ### Ajouter un composant (pattern réutilisable)
 
 Le fichier est **déclaratif** : chaque composant protégé est une entrée du
@@ -185,7 +230,8 @@ composant à structure sensible (ex. **onglets DSFR**), ajouter :
     allowedContent: '…',              // règles ACF (classes, aria-*, id…)
     requiredContent: 'div(fr-tabs)',
     editables: { … },                 // zones éditables {clé: {selector, allowedContent}}
-    idSync: [ … ]                     // option : unicité id + resync aria-*
+    idSync: [ … ],                    // option : unicité id + resync aria-*
+    dialog: { … }                     // option : popin d'édition guidée (cf. supra)
 }
 ```
 
