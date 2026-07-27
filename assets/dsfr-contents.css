@@ -65,12 +65,28 @@ body.cke_editable { font-family: Marianne, arial, sans-serif; color: #161616; }
 .fr-quote blockquote { margin: 0; font-size: 1.25rem; }
 .fr-quote__author { font-weight: 700; margin: .5rem 0 0; }
 
-/* Tableau */
+/* Tableau — aperçu commun au template palette (.fr-table) ET au tableau natif
+   nu : en édition, le tableau natif n'a pas encore l'enveloppe div.fr-table
+   (elle n'est posée qu'au downcast, cf. issue #10) — on style donc aussi la
+   table nue, sobrement, pour un rendu proche du DSFR. */
 .fr-table { margin: 1rem 0; overflow-x: auto; }
-.fr-table table { border-collapse: collapse; width: 100%; }
-.fr-table caption { text-align: left; font-weight: 700; padding: .5rem 0; caption-side: top; }
-.fr-table th, .fr-table td { border: 1px solid #ddd; padding: .5rem .75rem; text-align: left; }
-.fr-table thead th { background: #f6f6f6; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; border: 0; }
+.fr-table table { margin: 0; }
+caption { text-align: left; font-weight: 700; padding: .5rem 0; caption-side: top; }
+th, td { border: 1px solid #ddd; padding: .5rem .75rem; text-align: left; }
+thead th, th[scope="col"] { background: #f6f6f6; }
+/* Neutralise l'aide visuelle du plugin natif showborders (pointillés gris sur
+   les tableaux sans bordure) : nos bordures d'aperçu DSFR suffisent — sans
+   ceci, sa spécificité (0,2,4) l'emporterait et doublerait le trait. */
+.cke_editable.cke_show_borders table.cke_show_border,
+.cke_editable.cke_show_borders table.cke_show_border > tr > td,
+.cke_editable.cke_show_borders table.cke_show_border > tr > th,
+.cke_editable.cke_show_borders table.cke_show_border > tbody > tr > td,
+.cke_editable.cke_show_borders table.cke_show_border > tbody > tr > th,
+.cke_editable.cke_show_borders table.cke_show_border > thead > tr > td,
+.cke_editable.cke_show_borders table.cke_show_border > thead > tr > th,
+.cke_editable.cke_show_borders table.cke_show_border > tfoot > tr > td,
+.cke_editable.cke_show_borders table.cke_show_border > tfoot > tr > th { border: 1px solid #ddd; }
 
 /* Téléchargement */
 .fr-download { margin: 1rem 0; }

@@ -348,6 +348,60 @@ Si une zone éditable vise un élément absent de `CKEDITOR.dtd.$editable`
 oublier d'ajouter tout nouveau fichier d'asset à la liste du cache-buster dans
 `CKEditorDSFR.php`.
 
+## Normalisation DSFR des tableaux natifs (issue #10)
+
+Le composant Tableau n'est pas un widget (cf. supra) : rien n'empêchait donc un
+contributeur d'insérer un tableau **nu** via le bouton natif de CKEditor
+(`<table border="1" cellpadding="1" cellspacing="1" style="width:500px">`, sans
+`div.fr-table` ni `scope`) — ou d'en coller un depuis Word. Trois accroches
+dans `ckeditor-dsfr.js`, **sans widget** : l'édition native des cellules
+(clic droit → ligne/colonne/cellule, propriétés) reste strictement intacte.
+
+### 1. Normalisation au downcast (`editor.dataProcessor.htmlFilter`)
+
+Une règle sur `table`, posée à `instanceReady` (le dataProcessor n'existe
+qu'une fois l'instance prête), exécutée à chaque sortie de données (`getData`,
+bascule Source, sauvegarde) :
+
+- purge des attributs de présentation `border`/`cellpadding`/`cellspacing`/
+  `align`/`width`/`height` et des largeurs fixes inline (`width`/`height` du
+  `style`, les autres déclarations sont préservées) ;
+- `scope="col"` sur les `th` de la ligne d'en-tête (`thead`, ou première ligne
+  composée uniquement de `th`), `scope="row"` sur un `th` en tête de ligne de
+  corps — un `scope` déjà présent n'est jamais réécrit ;
+- enveloppe `div.fr-table` si le tableau n'y est pas déjà — **idempotent** :
+  le template de la palette et un contenu déjà normalisé ressortent inchangés.
+
+L'enveloppe est posée par chirurgie manuelle (`el.replaceWith(wrap)` puis
+`wrap.add(el)`, retour `undefined`) : retourner le wrapper depuis la règle
+laisserait le framework appeler `el.replaceWith(wrapper)` alors que le parent
+d'`el` a déjà été réécrit — arbre corrompu (vérifié dans le build 4.22.1).
+Le collage depuis Word est couvert par construction : quel que soit le chemin
+d'entrée, la donnée passe par ce même filtre de sortie.
+
+### 2. Défauts assainis de la dialog native (`CKEDITOR.on('dialogDefinition')`)
+
+Pour les dialogs `table` et `tableProperties` : bordure `0`, largeur vide,
+cellspacing/cellpadding vides. Aucun champ n'est retiré (l'UX connue est
+préservée) — seules les valeurs proposées à l'insertion changent, et le filtre
+du volet 1 reste le filet de sécurité si l'utilisateur les remplit.
+
+### 3. Aperçu DSFR en édition (`dsfr-contents.css`)
+
+En édition, le tableau natif n'a pas encore l'enveloppe (posée au downcast) :
+la feuille style aussi la `table` nue, sobrement (pleine largeur, bordures
+fines `#ddd`, en-têtes grisés), pour un rendu proche du DSFR quel que soit le
+chemin d'insertion. Le plugin natif `showborders` (pointillés gris sur les
+tableaux sans bordure, spécificité `(0,2,4)`) est neutralisé par des
+sélecteurs plus spécifiques — sans quoi il doublerait le trait.
+
+### Hors périmètre
+
+Le contenu legacy déjà enregistré avec des tableaux nus n'est corrigé qu'à la
+prochaine réédition (le filtre ne s'exécute qu'au passage par l'éditeur). Si un
+parc legacy significatif remonte, réévaluer un filet au rendu côté thème
+(theme-dsfr#55, fermée en ce sens).
+
 ## Packaging & release
 
 Distribution par **ZIP taggé** via GitHub Actions (`.github/workflows/release.yml`) :
