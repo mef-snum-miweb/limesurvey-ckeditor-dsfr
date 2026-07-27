@@ -177,11 +177,12 @@ généré et `aria-controls` resynchronisé — plus de correction manuelle.
 ### Composants couverts (issue #9)
 
 Toute la palette Modèles est alignée sur le pattern widget, à l'exception
-assumée du tableau (voir plus bas) et des onglets (itération dédiée, issue #8) :
+assumée du tableau (voir plus bas) :
 
 | Composant | Widget | Zones éditables inline | Popin |
 | --- | --- | --- | --- |
 | Accordéon (`section.fr-accordion`) | `dsfrAccordion` | intitulé (inline simple) + contenu (riche) | Intitulé |
+| Onglets (`div.fr-tabs`) — issue #8 | `dsfrTabs` | libellés (inline simple) + panneaux (riches), **dynamiques** | **gestion de la collection** : renommer, ajouter, supprimer (min 2) |
 | Mise en avant (`div.fr-callout`) — avec **et** sans titre | `dsfrCallout` | titre (si présent) + texte | Titre **optionnel** (vide = le `h3` est retiré ; rempli = créé et re-branché éditable) |
 | Alerte (`div.fr-alert`) — les 4 variantes | `dsfrAlert` | titre + texte (1ᵉʳ paragraphe) | Titre + **select Type** (bascule `fr-alert--info/success/error/warning`) |
 | Mise en exergue (`div.fr-highlight`) | `dsfrHighlight` | texte | — |
@@ -276,22 +277,68 @@ que le texte du bouton est modifiable en place. Limite assumée : le champ est
 en texte brut — valider la popin remplace un éventuel balisage inline du titre
 (`<strong>`…) par du texte simple.
 
+### Onglets (fr-tabs) : vue empilée + capacité « collection » (issue #8)
+
+Les onglets posent un problème nouveau : un nombre **variable** d'éléments
+appariés (bouton d'onglet ↔ panneau de contenu) — impossible à décrire par des
+zones éditables statiques, et une édition en « vrais onglets » (un seul panneau
+visible) masquerait du contenu au contributeur.
+
+**Vue d'édition** : les panneaux sont affichés **empilés** (comme l'accordéon
+apparaît déplié), chacun est une zone éditable **riche** (le panneau est un
+`div` : contenu multi-paragraphes, listes, images…). La barre d'onglets est du
+chrome — seuls ses libellés (`button.fr-tabs__tab`) sont éditables en place
+(inline simple, comme l'intitulé d'accordéon). Les repères visuels (barre
+d'aperçu, étiquette « Panneau de l'onglet N » par compteur CSS, séparateurs
+pointillés) viennent exclusivement de `dsfr-contents.css`, chargé dans l'iframe
+de l'éditeur : **rien n'en sort au downcast**.
+
+**Capacité générique `collection`** d'une entrée `WIDGETS` — réutilisable pour
+tout composant « liste de déclencheurs + panneaux » (onglets aujourd'hui,
+groupe d'accordéons demain) :
+
+- **zones éditables dynamiques** : branchées par `initEditable` au `init` du
+  widget (une par libellé, une par panneau), re-branchées après chaque
+  validation de popin — le registre `widget.editables` reste cohérent avec le
+  DOM, condition du nettoyage des artefacts `cke_*` au downcast ;
+- **recâblage** (`wire`) : à chaque init et chaque commit, ids **uniques dans
+  le document** (deux blocs d'onglets insérés depuis la palette ne collisionnent
+  jamais), appariement `aria-controls` / `aria-labelledby`, et état actif —
+  convention : le **premier** onglet est l'actif au downcast (`aria-selected`,
+  `tabindex`, classe `fr-tabs__panel--selected`) ;
+- **popin de gestion** (geste principal pour la structure, ouverte par
+  double-clic sur le cadre, Entrée, clic droit) : une ligne par onglet (champ
+  libellé + Supprimer), bouton « Ajouter un onglet », minimum `min` (2)
+  éléments. Supprimer un onglet dont le panneau **n'est pas vide** bascule la
+  ligne en **confirmation intégrée à la popin** (jamais de `confirm()` natif).
+  À la validation, les panneaux conservés **gardent leur nœud DOM** (contenu
+  riche intact), la barre est reconstruite, ids/aria resynchronisés.
+
+Au rendu répondant : markup fr-tabs standard — le JS DSFR embarqué par le thème
+rend les onglets fonctionnels.
+
+> **Sens éditorial** : quand préférer des onglets à un accordéon (et les limites
+> RGAA — ne pas cacher une information indispensable dans un onglet secondaire)
+> relève du **guide contributeur de la suite**, hors périmètre de cette
+> extension (à traiter côté `limesurvey-dsfr-suite`).
+
 ### Ajouter un composant (pattern réutilisable)
 
 Le fichier est **déclaratif** : chaque composant protégé est une entrée du
 tableau `WIDGETS` de `dsfr-widgets.js` — aucun code à dupliquer. Pour un futur
-composant à structure sensible (ex. **onglets DSFR**), ajouter :
+composant à structure sensible, ajouter :
 
 ```js
 {
-    name: 'dsfrTabs',                 // nom unique du widget
-    pathName: 'onglets',              // libellé du fil d'Ariane de l'éditeur
-    upcastSelector: { element: 'div', 'class': 'fr-tabs' },
+    name: 'dsfrMonComposant',         // nom unique du widget
+    pathName: 'mon composant',        // libellé du fil d'Ariane de l'éditeur
+    upcastSelector: { element: 'div', 'class': 'fr-mon-composant' },
     allowedContent: '…',              // règles ACF (classes, aria-*, id…)
-    requiredContent: 'div(fr-tabs)',
+    requiredContent: 'div(fr-mon-composant)',
     editables: { … },                 // zones éditables {clé: {selector, allowedContent}}
     idSync: [ … ],                    // option : unicité id + resync aria-*
     mask: true,                       // option : masque — la popin devient le geste principal
+    collection: { … },                // option : éléments répétables + popin de gestion (cf. onglets)
     dialog: { … }                     // option : popin d'édition guidée (cf. supra)
 }
 ```
