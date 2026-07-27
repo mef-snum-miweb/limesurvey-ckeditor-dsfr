@@ -75,6 +75,22 @@ Déposer le dossier dans l'un des emplacements suivants :
 Puis : Administration → **Configuration → Plugins** → *Analyser les fichiers* →
 **Installer** puis **Activer** `CKEditorDSFR`.
 
+### Migrer d'une installation filesystem vers le ZIP
+
+LimeSurvey résout les plugins dans l'ordre `plugins/` → `application/core/plugins/`
+→ `upload/plugins/` et s'arrête au **premier** trouvé. La désinstallation via l'UI
+ne supprime **pas** les fichiers : une copie résiduelle dans `plugins/` **masque
+silencieusement** la version installée par ZIP (le plugin affiche alors un
+avertissement sur les pages d'admin — voir
+[`docs/architecture.md`](docs/architecture.md)). Procédure :
+
+1. **Désactiver** le plugin (Configuration → Plugins).
+2. **Désinstaller** via l'UI (ne supprime que la ligne en base).
+3. **Supprimer la copie de `plugins/CKEditorDSFR/` côté serveur** (ou retirer le
+   bind-mount du `docker-compose`).
+4. **Upload & install** du ZIP (Méthode 1).
+5. **Activer** `CKEditorDSFR`.
+
 ## Usage (côté gestionnaire)
 
 - Composants riches (alerte, accordéon, tableau…) : à insérer dans le champ

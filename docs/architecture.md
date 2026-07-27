@@ -39,6 +39,44 @@ passent.
 
 Source : [`FileFetcherUploadZip.php`](https://github.com/LimeSurvey/LimeSurvey/blob/master/application/libraries/ExtensionInstaller/FileFetcherUploadZip.php).
 
+### Ordre de résolution & shadowing (vérifié sur LimeSurvey 6.16.16)
+
+`PluginManager::getPluginInfo()` parcourt `$pluginDirs` dans l'ordre **`user`
+(`plugins/`) → `core` (`application/core/plugins/`) → `upload`
+(`upload/plugins/`)** et s'arrête au **premier** `CKEditorDSFR.php` trouvé. Une
+copie présente dans un répertoire prioritaire **masque silencieusement** toute
+copie des répertoires suivants.
+
+Scénario reproduit (issue [#2](https://github.com/mef-snum-miweb/limesurvey-ckeditor-dsfr/issues/2)) :
+
+1. Plugin installé via `plugins/` (filesystem — checkout git ou bind-mount docker).
+2. Dans l'UI d'admin : désactivation → **désinstallation**. L'UI ne supprime que
+   la ligne en base — jamais les fichiers (le bouton « Delete files » de
+   `PluginManagerController::deleteFiles()` n'existe que pour les plugins `upload`).
+3. **Réinstallation via Upload & install** (ZIP) : la ligne DB est créée
+   (`plugin_type=upload`, nouvelle version), les fichiers déposés dans
+   `upload/plugins/CKEditorDSFR/` — **sans aucune erreur**.
+4. Mais la copie résiduelle de `plugins/CKEditorDSFR/` est trouvée en premier :
+   **la classe chargée vient de l'ancienne copie** (vérifié au runtime via
+   `ReflectionClass`), alors que l'admin affiche la version du ZIP (lue en DB).
+   Les assets suivent, publiés depuis le `__DIR__` de la classe chargée.
+   Effet secondaire : `getPluginInfo()` retourne `extensionConfig=null` (classe
+   déjà chargée au boot), dégradant l'affichage compatibilité/description.
+
+En clair : l'admin croit exécuter la nouvelle version, il exécute l'ancienne,
+sans aucun message nulle part.
+
+**Garde-fou implémenté** — à `beforeControllerAction` (pages admin uniquement),
+le plugin résout les 3 emplacements (`Yii::getPathOfAlias()` sur les alias du
+tableau ci-dessus, avec fallback `App()->getConfig('uploaddir')` si l'alias
+`uploaddir` n'est pas encore posé) et fait un `is_dir` sur chacun. S'il se
+trouve dans **plusieurs** emplacements, il affiche un avertissement admin non
+bloquant (`setFlashMessage(..., 'warning')`, rendu par le widget `FlashMessage`
+du header d'admin) indiquant l'emplacement réellement chargé (`__DIR__`), le ou
+les emplacements ignorés, et la consigne : **supprimer la copie obsolète côté
+serveur**. Procédure de migration complète : voir le
+[README](../README.md#migrer-dune-installation-filesystem-vers-le-zip).
+
 ## Contrainte publish() → et son contournement
 
 `PluginBase::publish($assetName)` (méthode utilitaire pour publier un dossier
